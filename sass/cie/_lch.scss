@@ -5,36 +5,31 @@
 @use '../utils/units';
 @use '../convert';
 
-@function normalize(
-  $lch,
+$accurate-gamut: false;
+$correction-iterations-limit: 5;
+
+@function normalize($lch,
 ) {
   $lch: list.set-nth($lch, 3, units.to-degrees(list.nth($lch, 3)));
   @return units.strip-all($lch);
 }
 
-@function _channel-in_srgb(
-  $is,
+@function _channel-in_srgb($is,
   $val,
   $range: 0 1,
 ) {
   $E: 0.000005;
-  @return $is and ($val == math.clamp(0 - $E, $val, 1 + $E));
+  @return $is and ($val==math.clamp(0 - $E, $val, 1 + $E));
 }
 
-@function in-srgb(
-  $rgb
-) {
-  @return array.reduce(
-    $rgb,
+@function in-srgb($rgb) {
+  @return array.reduce($rgb,
     meta.get-function('_channel-in_srgb'),
-    true
-  );
+    true);
 }
 
-@function to-srgb(
-  $lch,
-  $check-gamut: false
-) {
+@function to-srgb($lch,
+  $check-gamut: false) {
   $result: convert.LCH_to_sRGB($lch);
 
   @if ($check-gamut) {
@@ -45,13 +40,12 @@
 }
 
 // gamut correction
-@function gamut-correct(
-  $l, $c, $h
-) {
+@function gamut-correct($l, $c, $h) {
   // Moves an lch color into the sRGB gamut
   // by holding the l and h steady,
   // and adjusting the c via binary-search
-  // until the color is on the sRGB boundary.
+  // until the color is on the sRGB boundary
+  // or until the counter reaches iterations limit.
   $output: to-srgb($l $c $h, true);
 
   @if (not $output) {
@@ -60,14 +54,21 @@
 
     $c: $c * 0.5;
 
+
+    $i: 0;
+
     // 0.0001 chosen fairly arbitrarily as "close enough"
-    @while (($hiC - $loC) > 0.0001) {
+    @while (($hiC - $loC) > 0.0001 and ($i < $correction-iterations-limit or $accurate-gamut)) {
       @if to-srgb($l $c $h, true) {
         $loC: $c;
-      } @else {
+      }
+
+      @else {
         $hiC: $c;
       }
+
       $c: ($hiC + $loC) * 0.5;
+      $i: $i+1;
     }
 
     $output: to-srgb($l $c $h);
